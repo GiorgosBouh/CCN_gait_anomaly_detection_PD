@@ -1,0 +1,52 @@
+import os
+import pandas as pd
+from sklearn.ensemble import IsolationForest
+
+# Set the input folder
+input_folder = "/Users/user/Desktop/Aegean_Uni_Master/Gait prediction with LLMs/Data/Gait cycles/New_folder/Knee_folder/Knee_2_cleaned"
+output_folder = os.path.join(input_folder, "Anomaly_Detection_Results")
+
+# Create output folder if it doesn't exist
+os.makedirs(output_folder, exist_ok=True)
+
+# Process each CSV file in the directory
+for filename in os.listdir(input_folder):
+    if filename.endswith(".csv"):
+        file_path = os.path.join(input_folder, filename)
+
+        # Read the CSV, skipping the second row
+        df = pd.read_csv(file_path, delimiter=";", decimal=",", skiprows=[1])
+
+        # Find all "Knee Flx/Extension" columns
+        knee_columns = [col for col in df.columns if "Knee Flx/Extension" in col]
+
+        if not knee_columns:
+            print(f"No 'Knee Flx/Extension' columns found in {filename}, skipping.")
+            continue
+
+        # Apply Isolation Forest to each "Knee Flx/Extension" column
+        for idx, col in enumerate(knee_columns):
+            # Drop NaNs and reset index
+            df_filtered = df[[col]].dropna().reset_index(drop=True)
+
+            if df_filtered.empty:
+                print(f"Skipping {col} in {filename} (empty or NaN values).")
+                continue
+
+            # Fit Isolation Forest
+            model = IsolationForest(contamination=0.05, random_state=42)
+            anomaly_scores = model.fit_predict(df_filtered)
+
+            # Map -1 to 1 (anomaly) and 1 to 0 (normal)
+            anomaly_labels = [1 if score == -1 else 0 for score in anomaly_scores]
+
+            # Insert the anomaly column next to the original column
+            anomaly_col_name = f"Anomaly_{col}_{idx + 1}"
+            df.insert(df.columns.get_loc(col) + 1, anomaly_col_name,
+                      anomaly_labels + [None] * (len(df) - len(anomaly_labels)))
+
+        # Save the modified DataFrame
+        output_file = os.path.join(output_folder, f"Anomaly_{filename}")
+        df.to_csv(output_file, sep=";", decimal=",", index=False)
+
+        print(f"Processed {filename}, saved results to {output_file}")
