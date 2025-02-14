@@ -10,7 +10,7 @@ from imblearn.over_sampling import SMOTE
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report, \
     precision_recall_curve
 
-# **1️⃣ File Paths**
+# **1️ File Paths**
 ankle_folder = "/Users/user/Desktop/Aegean_Uni_Master/Gait prediction with LLMs/Data/Gait cycles/Ankle_Files/NEW_ankle/Anomaly_Detection_Results_ankle/split_cleaned"
 knee_folder = "/Users/user/Desktop/Aegean_Uni_Master/Gait prediction with LLMs/Data/Gait cycles/New_folder/Knee_folder/Knee_2_cleaned/Split_Files"
 sequence_length = 100  # Gait cycle sequence length
@@ -54,7 +54,7 @@ y_combined = np.hstack((y_ankle, y_knee))
 
 def train_and_evaluate(X_data, y_data, label, save_folder):
     if X_data.shape[0] == 0:
-        print(f"❌ No valid data found for {label}. Skipping.")
+        print(f" No valid data found for {label}. Skipping.")
         return
 
     X_train, X_test, y_train, y_test = train_test_split(X_data, y_data, test_size=0.2, random_state=42, stratify=y_data)
@@ -94,18 +94,18 @@ def train_and_evaluate(X_data, y_data, label, save_folder):
     output_df.to_csv(os.path.join(save_folder, f"cnn_predictions_{label.lower().replace(' ', '_')}.csv"), sep=";",
                      decimal=",", index=False)
 
-    print(f"✅ {label} Model Results:")
-    print(f"✅ Optimal Threshold: {best_threshold:.4f}")
-    print(f"✅ Training Samples: {X_train_resampled.shape[0]}, Testing Samples: {X_test.shape[0]}")
-    print(f"✅ Test Accuracy: {test_accuracy:.4f}, Test Loss: {test_loss:.4f}")
-    print(f"✅ Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
-    print("🔹 **Classification Report:**")
+    print(f" {label} Model Results:")
+    print(f" Optimal Threshold: {best_threshold:.4f}")
+    print(f" Training Samples: {X_train_resampled.shape[0]}, Testing Samples: {X_test.shape[0]}")
+    print(f" Test Accuracy: {test_accuracy:.4f}, Test Loss: {test_loss:.4f}")
+    print(f" Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+    print(" **Classification Report:**")
     print(report)
-    print(f"✅ CNN training completed for **{label}**.\n")
+    print(f" CNN training completed for **{label}**.\n")
 
 
-print(f"🔹 Total Anomalies in Ankle Data: {total_ankle_anomalies}")
-print(f"🔹 Total Anomalies in Knee Data: {total_knee_anomalies}")
+print(f" Total Anomalies in Ankle Data: {total_ankle_anomalies}")
+print(f" Total Anomalies in Knee Data: {total_knee_anomalies}")
 
 train_and_evaluate(X_ankle, y_ankle, "Ankle Only", ankle_folder)
 train_and_evaluate(X_knee, y_knee, "Knee Only", knee_folder)
