@@ -1,0 +1,112 @@
+import os
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from imblearn.over_sampling import SMOTE
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report, \
+    precision_recall_curve
+
+# **1️⃣ File Paths**
+ankle_folder = "/Users/user/Desktop/Aegean_Uni_Master/Gait prediction with LLMs/Data/Gait cycles/Ankle_Files/NEW_ankle/Anomaly_Detection_Results_ankle/split_cleaned"
+knee_folder = "/Users/user/Desktop/Aegean_Uni_Master/Gait prediction with LLMs/Data/Gait cycles/New_folder/Knee_folder/Knee_2_cleaned/Split_Files"
+sequence_length = 100  # Gait cycle sequence length
+
+
+def process_data(folder, scaler, feature_keyword):
+    X_data, y_data = [], []
+    total_anomalies = 0
+    for filename in os.listdir(folder):
+        if filename.endswith(".csv"):
+            file_path = os.path.join(folder, filename)
+            df = pd.read_csv(file_path, delimiter=";", decimal=",", encoding="utf-8")
+
+            feature_columns = [col for col in df.columns if feature_keyword in col]
+            anomaly_columns = [col for col in df.columns if "Anomaly" in col]
+
+            for feature_col, anomaly_col in zip(feature_columns, anomaly_columns):
+                df[feature_col] = scaler.fit_transform(df[[feature_col]])
+
+                if len(df) >= sequence_length:
+                    for i in range(len(df) - sequence_length):
+                        X_data.append(df[feature_col].values[i:i + sequence_length])
+                        y_data.append(df[anomaly_col].values[i + sequence_length])
+
+                total_anomalies += df[anomaly_col].sum()
+
+    X_data = np.array(X_data).reshape(-1, sequence_length, 1)
+    y_data = np.array(y_data).astype(int)
+    return X_data, y_data, total_anomalies
+
+
+scaler_ankle = MinMaxScaler()
+scaler_knee = MinMaxScaler()
+
+X_ankle, y_ankle, total_ankle_anomalies = process_data(ankle_folder, scaler_ankle, "Ankle Dorsi/Plantarflexion")
+X_knee, y_knee, total_knee_anomalies = process_data(knee_folder, scaler_knee, "Knee Flx/Extension")
+
+X_combined = np.vstack((X_ankle, X_knee))
+y_combined = np.hstack((y_ankle, y_knee))
+
+
+def train_and_evaluate(X_data, y_data, label, save_folder):
+    if X_data.shape[0] == 0:
+        print(f"❌ No valid data found for {label}. Skipping.")
+        return
+
+    X_train, X_test, y_train, y_test = train_test_split(X_data, y_data, test_size=0.2, random_state=42, stratify=y_data)
+    smote = SMOTE(sampling_strategy="auto", random_state=42)
+    X_train_resampled, y_train_resampled = smote.fit_resample(X_train.reshape(X_train.shape[0], -1), y_train)
+    X_train_resampled = X_train_resampled.reshape(-1, sequence_length, 1)
+
+    model = Sequential([
+        Conv1D(64, kernel_size=5, activation="relu", input_shape=(sequence_length, 1)),
+        MaxPooling1D(pool_size=2),
+        Conv1D(128, kernel_size=3, activation="relu"),
+        MaxPooling1D(pool_size=2),
+        Flatten(),
+        Dense(64, activation="relu"),
+        Dropout(0.3),
+        Dense(1, activation="sigmoid")
+    ])
+
+    model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["accuracy"])
+    model.fit(X_train_resampled, y_train_resampled, epochs=30, batch_size=16, validation_data=(X_test, y_test))
+
+    test_loss, test_accuracy = model.evaluate(X_test, y_test)
+    y_probs = model.predict(X_test)
+
+    precisions, recalls, thresholds = precision_recall_curve(y_test, y_probs)
+    best_index = np.argmax(precisions * recalls)
+    best_threshold = thresholds[best_index]
+    y_pred = (y_probs > best_threshold).astype("int32")
+
+    precision = precision_score(y_test, y_pred, zero_division=0)
+    recall = recall_score(y_test, y_pred, zero_division=0)
+    f1 = f1_score(y_test, y_pred, zero_division=0)
+    report = classification_report(y_test, y_pred, target_names=["Normal", "Anomaly"])
+
+    model.save(os.path.join(save_folder, f"cnn_{label.lower().replace(' ', '_')}.h5"))
+    output_df = pd.DataFrame({"Actual": y_test, "Predicted": y_pred.flatten()})
+    output_df.to_csv(os.path.join(save_folder, f"cnn_predictions_{label.lower().replace(' ', '_')}.csv"), sep=";",
+                     decimal=",", index=False)
+
+    print(f"✅ {label} Model Results:")
+    print(f"✅ Optimal Threshold: {best_threshold:.4f}")
+    print(f"✅ Training Samples: {X_train_resampled.shape[0]}, Testing Samples: {X_test.shape[0]}")
+    print(f"✅ Test Accuracy: {test_accuracy:.4f}, Test Loss: {test_loss:.4f}")
+    print(f"✅ Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+    print("🔹 **Classification Report:**")
+    print(report)
+    print(f"✅ CNN training completed for **{label}**.\n")
+
+
+print(f"🔹 Total Anomalies in Ankle Data: {total_ankle_anomalies}")
+print(f"🔹 Total Anomalies in Knee Data: {total_knee_anomalies}")
+
+train_and_evaluate(X_ankle, y_ankle, "Ankle Only", ankle_folder)
+train_and_evaluate(X_knee, y_knee, "Knee Only", knee_folder)
+train_and_evaluate(X_combined, y_combined, "Both Ankle and Knee", ankle_folder)
